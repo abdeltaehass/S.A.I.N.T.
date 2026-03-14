@@ -10,3 +10,4 @@ model/encoder.pkl
 model/feature_cols.json
 *.egg-info/
 .DS_Store
+dump.rdb
