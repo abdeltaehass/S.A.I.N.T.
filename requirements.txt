@@ -1,0 +1,19 @@
+# Core ML
+torch>=2.2.0
+numpy>=1.26.0
+scikit-learn>=1.4.0
+pandas>=2.2.0
+
+# API & Caching
+flask>=3.0.0
+flask-cors>=4.0.0
+redis>=5.0.0
+
+# Dashboard
+dash>=2.16.0
+dash-bootstrap-components>=1.6.0
+plotly>=5.20.0
+
+# Utilities
+python-dotenv>=1.0.0
+requests>=2.31.0
