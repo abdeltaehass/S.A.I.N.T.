@@ -1,0 +1,34 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  api:
+    build: .
+    command: python api/routes.py
+    ports:
+      - "5001:5001"
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./model:/app/model
+      - ./data:/app/data
+
+  dashboard:
+    build: .
+    command: python dashboard/app.py
+    ports:
+      - "8050:8050"
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+      - api
