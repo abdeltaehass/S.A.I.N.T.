@@ -243,12 +243,14 @@ def refresh(_n):
     if not decisions:
         return empty, empty, empty, empty, [], [], False, "—","—","—","—","—","—"
 
-    # ── Aggregate ────────────────────────────────────────────────────────────
+    # ── Single-pass aggregation ──────────────────────────────────────────────
     class_counts:  dict[str, int]   = defaultdict(int)
     action_counts: dict[str, int]   = defaultdict(int)
     confidences:   list[float]      = []
     burst = False
     n_review = 0
+    reviewed_ids = set(reviews.keys())
+    review_rows: list[dict] = []
 
     # bucket by 10-second intervals for timeline
     timeline_buckets: dict[int, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -261,6 +263,15 @@ def refresh(_n):
         confidences.append(d.get("confidence", 0.0))
         if d.get("needs_review"):
             n_review += 1
+            if d.get("decision_id") not in reviewed_ids:
+                ts_str = datetime.fromtimestamp(d.get("timestamp", 0)).strftime("%H:%M:%S")
+                review_rows.append({
+                    "ts":              ts_str,
+                    "decision_id":     d.get("decision_id", "")[:12] + "…",
+                    "predicted_class": cls,
+                    "confidence":      f"{d.get('confidence', 0):.3f}",
+                    "rationale":       d.get("rationale", "")[:90] + "…",
+                })
         if "burst" in d.get("rationale", "").lower():
             burst = True
         ts = d.get("timestamp", 0)
@@ -332,20 +343,6 @@ def refresh(_n):
             "needs_review":    "YES" if d.get("needs_review") else "—",
             "rationale":       d.get("rationale", "")[:100] + "…",
         })
-
-    # ── Review queue (flagged, not yet reviewed by analyst) ───────────────────
-    reviewed_ids = set(reviews.keys())
-    review_rows = []
-    for d in decisions:
-        if d.get("needs_review") and d.get("decision_id") not in reviewed_ids:
-            ts_str = datetime.fromtimestamp(d.get("timestamp", 0)).strftime("%H:%M:%S")
-            review_rows.append({
-                "ts":              ts_str,
-                "decision_id":     d.get("decision_id", "")[:12] + "…",
-                "predicted_class": d.get("predicted_class", ""),
-                "confidence":      f"{d.get('confidence', 0):.3f}",
-                "rationale":       d.get("rationale", "")[:90] + "…",
-            })
 
     avg_conf = f"{sum(confidences)/len(confidences):.3f}" if confidences else "—"
 

@@ -77,10 +77,8 @@ def _encode_categoricals(
     else:
         for col in CATEGORICAL_FEATURES:
             le = encoders[col]
-            # Handle unseen labels gracefully
-            df[col] = df[col].astype(str).apply(
-                lambda x: le.transform([x])[0] if x in le.classes_ else -1
-            )
+            # pd.Categorical returns -1 for unseen labels — vectorized, no row-wise apply
+            df[col] = pd.Categorical(df[col].astype(str), categories=le.classes_).codes
         df = pd.get_dummies(df, columns=CATEGORICAL_FEATURES)
     return df, encoders
 
