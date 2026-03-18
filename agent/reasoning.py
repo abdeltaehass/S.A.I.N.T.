@@ -13,8 +13,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections import deque
-from dataclasses import dataclass, field, asdict
-from typing import Deque
+from dataclasses import dataclass, asdict
 
 import numpy as np
 import torch
@@ -80,10 +79,10 @@ class ThreatReasoningAgent:
         self.model.eval()
 
         # Short-term memory: deque of recent ThreatDecisions
-        self._memory: Deque[ThreatDecision] = deque(maxlen=memory_size)
+        self._memory: deque[ThreatDecision] = deque(maxlen=memory_size)
 
         # Running counters for anomaly burst detection
-        self._burst_window: Deque[str] = deque(maxlen=50)
+        self._burst_window: deque[str] = deque(maxlen=50)
 
     # ------------------------------------------------------------------
     # Core decision method
@@ -234,16 +233,17 @@ class ThreatReasoningAgent:
         if not self._memory:
             return {}
         decisions = list(self._memory)
-        total = len(decisions)
-        action_counts = {"allow": 0, "flag": 0, "block": 0}
+        action_counts: dict[str, int] = {}
         class_counts: dict[str, int] = {}
+        total_conf = 0.0
         for d in decisions:
             action_counts[d.action] = action_counts.get(d.action, 0) + 1
             class_counts[d.predicted_class] = class_counts.get(d.predicted_class, 0) + 1
+            total_conf += d.confidence
         return {
-            "total_processed": total,
+            "total_processed": len(decisions),
             "action_counts": action_counts,
             "class_counts": class_counts,
             "burst_detected": self._detect_burst(),
-            "avg_confidence": float(np.mean([d.confidence for d in decisions])),
+            "avg_confidence": total_conf / len(decisions),
         }

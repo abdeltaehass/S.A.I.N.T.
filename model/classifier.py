@@ -4,7 +4,6 @@ SAINT classifier — PyTorch feed-forward network for NSL-KDD 5-class detection.
 Architecture: BatchNorm → [Linear → BatchNorm → ReLU → Dropout] × N → Linear
 """
 
-import pickle
 from pathlib import Path
 
 import numpy as np
@@ -139,7 +138,6 @@ def evaluate(
     model.to(device)
 
     X_t = torch.tensor(X, dtype=torch.float32).to(device)
-    y_t = torch.tensor(y, dtype=torch.long).to(device)
 
     with torch.no_grad():
         logits = model(X_t)

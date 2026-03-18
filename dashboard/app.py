@@ -34,8 +34,13 @@ from config import (
 # Redis helpers
 # ---------------------------------------------------------------------------
 
+_redis: redis.Redis | None = None
+
 def get_redis() -> redis.Redis:
-    return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
+    global _redis
+    if _redis is None:
+        _redis = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
+    return _redis
 
 
 def fetch_decisions(n: int = 500) -> list[dict]:
@@ -304,9 +309,7 @@ def refresh(_n):
         hole=0.45,
         textinfo="percent+label",
     ))
-    pie_fig.update_layout(title="Agent Actions", showlegend=False,
-                          paper_bgcolor=_CARD_BG, font_color="#eee",
-                          margin=dict(l=20, r=20, t=40, b=20))
+    pie_fig.update_layout(title="Agent Actions", showlegend=False, **_LAYOUT_BASE)
 
     # ── Confidence histogram ──────────────────────────────────────────────────
     hist_fig = go.Figure(go.Histogram(

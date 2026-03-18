@@ -5,7 +5,6 @@ Downloads KDDTrain+.txt / KDDTest+.txt from the UNB repository if not present,
 then engineers the 41-feature pipeline used by the SAINT classifier.
 """
 
-import os
 import pickle
 import urllib.request
 from pathlib import Path
@@ -171,11 +170,6 @@ def preprocess_single(
     Returns: float32 array of shape (1, num_features)
     """
     df = pd.DataFrame([raw])
-    # Fill any missing features with 0
-    for col in FEATURE_NAMES:
-        if col not in df.columns:
-            df[col] = 0
-
     df, _ = _encode_categoricals(df, encoders, fit=False)
     df, _ = _scale_numerics(df, scaler, fit=False)
 

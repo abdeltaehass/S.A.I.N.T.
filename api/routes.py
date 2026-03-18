@@ -15,7 +15,6 @@ import json
 import time
 from pathlib import Path
 
-import numpy as np
 import redis
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -39,33 +38,32 @@ CORS(app)
 
 # --- Redis ---
 _redis: redis.Redis | None = None
+
 def get_redis() -> redis.Redis:
     global _redis
     if _redis is None:
         _redis = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
     return _redis
 
-# --- Model + Agent (lazy-loaded) ---
+# --- Model + Agent (lazy-loaded once) ---
 _agent: ThreatReasoningAgent | None = None
 _feature_cols: list[str] | None = None
+_scaler = None
+_encoders = None
 
 def get_agent() -> tuple[ThreatReasoningAgent, list[str]]:
-    global _agent, _feature_cols
+    global _agent, _feature_cols, _scaler, _encoders
     if _agent is None:
         print("Loading model and artifacts...")
         model = load_model()
-        scaler, encoders = load_artifacts()
-        # Recover feature columns by doing a dry-run through the loader
-        from data.loader import load_dataset
-        # We need feature_cols — store them at train time or reload from disk
+        _scaler, _encoders = load_artifacts()
         feat_path = Path("model/feature_cols.json")
-        if feat_path.exists():
-            with open(feat_path) as f:
-                _feature_cols = json.load(f)
-        else:
+        if not feat_path.exists():
             raise RuntimeError(
                 "model/feature_cols.json not found. Run scripts/train.py first."
             )
+        with open(feat_path) as f:
+            _feature_cols = json.load(f)
         _agent = ThreatReasoningAgent(model)
         print("Agent ready.")
     return _agent, _feature_cols
@@ -76,8 +74,7 @@ def get_agent() -> tuple[ThreatReasoningAgent, list[str]]:
 # ---------------------------------------------------------------------------
 
 def _cache_key(features: dict) -> str:
-    payload = json.dumps(features, sort_keys=True)
-    return "saint:pred:" + hashlib.md5(payload.encode()).hexdigest()
+    return "saint:pred:" + hashlib.md5(json.dumps(features, sort_keys=True).encode()).hexdigest()
 
 
 def _cached_predict(features: dict, agent: ThreatReasoningAgent, feature_cols: list[str]) -> dict:
@@ -92,21 +89,16 @@ def _cached_predict(features: dict, agent: ThreatReasoningAgent, feature_cols: l
     except redis.RedisError:
         pass  # Redis unavailable — fall through to fresh inference
 
-    scaler, encoders = load_artifacts()
-    X = preprocess_single(features, scaler, encoders, feature_cols)
+    X = preprocess_single(features, _scaler, _encoders, feature_cols)
     decision = agent.decide(X)
     result = decision.to_dict()
     result["cached"] = False
 
+    serialized = json.dumps(result)
     try:
-        r.setex(key, INFERENCE_CACHE_TTL, json.dumps(result))
-    except redis.RedisError:
-        pass
-
-    # Publish to Redis pub/sub stream for dashboard live-feed
-    try:
-        r.lpush("saint:decisions", json.dumps(result))
-        r.ltrim("saint:decisions", 0, 999)   # keep last 1000
+        r.setex(key, INFERENCE_CACHE_TTL, serialized)
+        r.lpush("saint:decisions", serialized)
+        r.ltrim("saint:decisions", 0, 999)
     except redis.RedisError:
         pass
 
