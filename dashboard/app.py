@@ -233,7 +233,7 @@ app.layout = dbc.Container(fluid=True, style={"backgroundColor": _DARK_BG, "minH
     Output("kpi-conf",       "children"),
     Input("interval",        "n_intervals"),
 )
-def refresh(_n):
+def refresh(_):
     decisions = fetch_decisions(500)
     reviews   = fetch_reviews()
 
@@ -283,17 +283,23 @@ def refresh(_n):
     sorted_buckets = sorted(timeline_buckets.keys())
     x_times = [datetime.fromtimestamp(b).strftime("%H:%M:%S") for b in sorted_buckets]
 
+    def _hex_to_rgba(hex_color: str, alpha: float = 0.6) -> str:
+        h = hex_color.lstrip("#")
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        return f"rgba({r},{g},{b},{alpha})"
+
     timeline_fig = go.Figure()
     for cls in all_classes:
         y_vals = [timeline_buckets[b].get(cls, 0) for b in sorted_buckets]
         if any(v > 0 for v in y_vals):
+            color = CLASS_COLORS.get(cls, "#888888")
             timeline_fig.add_trace(go.Scatter(
                 x=x_times, y=y_vals,
                 name=cls.upper(),
                 mode="lines",
                 stackgroup="one",
-                line=dict(width=0.5, color=CLASS_COLORS.get(cls, "#888")),
-                fillcolor=CLASS_COLORS.get(cls, "#888") + "99",
+                line=dict(width=0.5, color=color),
+                fillcolor=_hex_to_rgba(color),
             ))
     timeline_fig.update_layout(
         title="Attack Timeline (10-second buckets)",
