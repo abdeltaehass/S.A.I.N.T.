@@ -83,8 +83,8 @@ _LAYOUT_BASE = dict(
     plot_bgcolor=_PANEL_BG,
     font=dict(family="Inter, sans-serif", color="#ccd"),
     margin=dict(l=20, r=20, t=36, b=20),
-    xaxis=dict(gridcolor="#ffffff0a", linecolor="#ffffff10", tickfont=dict(size=10)),
-    yaxis=dict(gridcolor="#ffffff0a", linecolor="#ffffff10", tickfont=dict(size=10)),
+    xaxis=dict(gridcolor="rgba(255,255,255,0.04)", linecolor="rgba(255,255,255,0.06)", tickfont=dict(size=10)),
+    yaxis=dict(gridcolor="rgba(255,255,255,0.04)", linecolor="rgba(255,255,255,0.06)", tickfont=dict(size=10)),
 )
 
 def _hex_to_rgba(hex_color: str, alpha: float = 0.55) -> str:
