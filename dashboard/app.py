@@ -2,7 +2,7 @@
 SAINT — Agent-in-the-loop monitoring dashboard (Plotly Dash).
 
 Panels:
-  • KPI cards: total / allowed / flagged / blocked / review queue
+  • KPI cards: total / allowed / flagged / blocked / review queue / avg confidence
   • Attack timeline  — stacked area chart per threat class over time
   • Threat class distribution — bar chart
   • Action breakdown — donut pie
@@ -62,7 +62,7 @@ def fetch_reviews() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Color palettes
+# Color palettes & chart defaults
 # ---------------------------------------------------------------------------
 
 ACTION_COLORS = {"allow": "#2ECC71", "flag": "#F39C12", "block": "#E74C3C"}
@@ -73,27 +73,50 @@ CLASS_COLORS  = {
     "r2l":    "#9B59B6",
     "u2r":    "#1ABC9C",
 }
-_DARK_BG   = "#0d0d1a"
-_CARD_BG   = "#16213e"
-_PANEL_BG  = "#1a1a2e"
-_ACCENT    = "#00F5D4"
+_DARK_BG  = "#0d0d1a"
+_CARD_BG  = "#16213e"
+_PANEL_BG = "#1a1a2e"
+_ACCENT   = "#00F5D4"
 
 _LAYOUT_BASE = dict(
     paper_bgcolor=_CARD_BG,
     plot_bgcolor=_PANEL_BG,
-    font_color="#eee",
-    margin=dict(l=20, r=20, t=40, b=20),
+    font=dict(family="Inter, sans-serif", color="#ccd"),
+    margin=dict(l=20, r=20, t=36, b=20),
+    xaxis=dict(gridcolor="#ffffff0a", linecolor="#ffffff10", tickfont=dict(size=10)),
+    yaxis=dict(gridcolor="#ffffff0a", linecolor="#ffffff10", tickfont=dict(size=10)),
 )
 
+def _hex_to_rgba(hex_color: str, alpha: float = 0.55) -> str:
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+
 # ---------------------------------------------------------------------------
-# Reusable components
+# Reusable UI components
 # ---------------------------------------------------------------------------
 
-def _kpi_card(card_id: str, title: str, color: str = _ACCENT) -> dbc.Card:
-    return dbc.Card(dbc.CardBody([
-        html.H6(title, className="text-muted mb-1", style={"fontSize": "0.75rem"}),
-        html.H3("—", id=card_id, style={"color": color, "marginBottom": 0}),
-    ]), style={"backgroundColor": _CARD_BG, "border": f"1px solid {color}22"})
+def _kpi_card(card_id: str, label: str, icon: str, color: str) -> html.Div:
+    return html.Div(className="kpi-card", style={
+        "borderLeft": f"3px solid {color}",
+        "boxShadow": f"0 0 20px {color}18",
+    }, children=[
+        html.Div(icon, className="kpi-icon"),
+        html.Div(label, className="kpi-label"),
+        html.Div("—", id=card_id, className="kpi-value", style={"color": color}),
+    ])
+
+
+def _chart_card(title: str, title_color: str, graph_id: str, height: str = "260px") -> dbc.Card:
+    return dbc.Card([
+        html.Div(title, className="section-header", style={"color": title_color}),
+        dbc.CardBody(dcc.Graph(
+            id=graph_id,
+            style={"height": height},
+            config={"displayModeBar": False},
+        ), style={"padding": "8px"}),
+    ], className="chart-card")
 
 
 _FEED_COLS = [
@@ -106,21 +129,34 @@ _FEED_COLS = [
 ]
 
 _REVIEW_COLS = [
-    {"name": "Time",         "id": "ts"},
-    {"name": "Decision ID",  "id": "decision_id"},
-    {"name": "Pred. Class",  "id": "predicted_class"},
-    {"name": "Confidence",   "id": "confidence"},
-    {"name": "Rationale",    "id": "rationale"},
+    {"name": "Time",        "id": "ts"},
+    {"name": "ID",          "id": "decision_id"},
+    {"name": "Class",       "id": "predicted_class"},
+    {"name": "Confidence",  "id": "confidence"},
+    {"name": "Rationale",   "id": "rationale"},
 ]
 
-_TABLE_STYLE = dict(
-    style_table={"overflowX": "auto"},
-    style_header={"backgroundColor": _PANEL_BG, "color": _ACCENT, "fontWeight": "bold"},
-    style_data={"backgroundColor": _CARD_BG, "color": "#eee", "fontSize": "0.82rem"},
+_TABLE_BASE = dict(
+    style_table={"overflowX": "auto", "border": "none"},
+    style_header={
+        "backgroundColor": _PANEL_BG,
+        "color": _ACCENT,
+        "fontWeight": "600",
+        "border": "none",
+        "fontSize": "0.68rem",
+        "letterSpacing": "1.5px",
+        "textTransform": "uppercase",
+    },
+    style_data={
+        "backgroundColor": _CARD_BG,
+        "color": "#ccd",
+        "border": "none",
+    },
 )
 
+
 # ---------------------------------------------------------------------------
-# Layout
+# App & layout
 # ---------------------------------------------------------------------------
 
 app = dash.Dash(
@@ -129,88 +165,102 @@ app = dash.Dash(
     title="SAINT — Network IDS",
 )
 
-app.layout = dbc.Container(fluid=True, style={"backgroundColor": _DARK_BG, "minHeight": "100vh", "padding": "12px"}, children=[
+app.layout = dbc.Container(
+    fluid=True,
+    style={"backgroundColor": _DARK_BG, "minHeight": "100vh", "padding": "16px 20px"},
+    children=[
 
-    # ── Header ──────────────────────────────────────────────────────────────
-    dbc.Row(dbc.Col(html.H2(
-        "S.A.I.N.T. — Network Intrusion Detection",
-        className="text-center my-3",
-        style={"color": _ACCENT, "letterSpacing": "2px"},
-    ))),
+        # ── Header ──────────────────────────────────────────────────────────
+        dbc.Row(dbc.Col(
+            html.Div(className="saint-header d-flex justify-content-between align-items-center", children=[
+                html.Div([
+                    html.H1("S.A.I.N.T.", className="saint-title"),
+                    html.Div("Autonomous Intrusion Detection · Agent-in-the-Loop", className="saint-subtitle"),
+                ]),
+                html.Div(className="live-badge", children=[
+                    html.Div(className="live-dot"),
+                    "Live",
+                ]),
+            ])
+        ), className="mb-3"),
 
-    # ── Burst alert ─────────────────────────────────────────────────────────
-    dbc.Row(dbc.Col(dbc.Alert(
-        [html.Strong("BURST ATTACK DETECTED  "), "— sustained malicious traffic pattern in recent window"],
-        id="burst-alert", color="danger", is_open=False, dismissable=True,
-        style={"textAlign": "center"},
-    ))),
+        # ── Burst alert ─────────────────────────────────────────────────────
+        dbc.Row(dbc.Col(dbc.Alert(
+            html.Div(className="burst-alert-body", children=[
+                html.Span("⚠", style={"fontSize": "1.1rem"}),
+                html.Strong("BURST ATTACK PATTERN DETECTED"),
+                html.Span("— sustained malicious traffic in recent window"),
+            ]),
+            id="burst-alert", color="danger", is_open=False, dismissable=True,
+        )), className="mb-3"),
 
-    # ── KPI row ─────────────────────────────────────────────────────────────
-    dbc.Row([
-        dbc.Col(_kpi_card("kpi-total",   "Total Processed",   _ACCENT),     width=2),
-        dbc.Col(_kpi_card("kpi-allow",   "Allowed",           "#2ECC71"),   width=2),
-        dbc.Col(_kpi_card("kpi-flag",    "Flagged",           "#F39C12"),   width=2),
-        dbc.Col(_kpi_card("kpi-block",   "Blocked",           "#E74C3C"),   width=2),
-        dbc.Col(_kpi_card("kpi-review",  "Needs Review",      "#9B59B6"),   width=2),
-        dbc.Col(_kpi_card("kpi-conf",    "Avg Confidence",    "#3498DB"),   width=2),
-    ], className="mb-3 g-2"),
+        # ── KPI row ─────────────────────────────────────────────────────────
+        dbc.Row([
+            dbc.Col(_kpi_card("kpi-total",  "Total Processed", "⬡", _ACCENT),    width=2),
+            dbc.Col(_kpi_card("kpi-allow",  "Allowed",         "✓", "#2ECC71"),  width=2),
+            dbc.Col(_kpi_card("kpi-flag",   "Flagged",         "⚑", "#F39C12"),  width=2),
+            dbc.Col(_kpi_card("kpi-block",  "Blocked",         "✕", "#E74C3C"),  width=2),
+            dbc.Col(_kpi_card("kpi-review", "Needs Review",    "◉", "#9B59B6"),  width=2),
+            dbc.Col(_kpi_card("kpi-conf",   "Avg Confidence",  "◎", "#3498DB"),  width=2),
+        ], className="mb-3 g-2"),
 
-    # ── Attack timeline ──────────────────────────────────────────────────────
-    dbc.Row(dbc.Col(dbc.Card(dbc.CardBody(
-        dcc.Graph(id="timeline-chart", style={"height": "220px"}),
-    ), style={"backgroundColor": _CARD_BG})), className="mb-3"),
+        # ── Attack timeline ──────────────────────────────────────────────────
+        dbc.Row(dbc.Col(
+            _chart_card("Attack Timeline", _ACCENT, "timeline-chart", "200px")
+        ), className="mb-3"),
 
-    # ── Charts row ──────────────────────────────────────────────────────────
-    dbc.Row([
-        dbc.Col(dbc.Card(dbc.CardBody(dcc.Graph(id="class-bar",   style={"height": "260px"})),
-                         style={"backgroundColor": _CARD_BG}), width=5),
-        dbc.Col(dbc.Card(dbc.CardBody(dcc.Graph(id="action-pie",  style={"height": "260px"})),
-                         style={"backgroundColor": _CARD_BG}), width=3),
-        dbc.Col(dbc.Card(dbc.CardBody(dcc.Graph(id="conf-hist",   style={"height": "260px"})),
-                         style={"backgroundColor": _CARD_BG}), width=4),
-    ], className="mb-3 g-2"),
+        # ── Charts row ──────────────────────────────────────────────────────
+        dbc.Row([
+            dbc.Col(_chart_card("Threat Distribution", "#3498DB", "class-bar"),   width=5),
+            dbc.Col(_chart_card("Agent Actions",       "#9B59B6", "action-pie"),  width=3),
+            dbc.Col(_chart_card("Confidence",          _ACCENT,   "conf-hist"),   width=4),
+        ], className="mb-3 g-2"),
 
-    # ── Review queue + live feed ─────────────────────────────────────────────
-    dbc.Row([
-        # Review queue (flagged, awaiting analyst)
-        dbc.Col(dbc.Card([
-            dbc.CardHeader(html.Strong("Review Queue", style={"color": "#F39C12"}),
-                           style={"backgroundColor": _PANEL_BG}),
-            dbc.CardBody(dash_table.DataTable(
-                id="review-table",
-                columns=_REVIEW_COLS,
-                data=[],
-                page_size=8,
-                **_TABLE_STYLE,
-                style_data_conditional=[
-                    {"if": {"row_index": "odd"}, "backgroundColor": _PANEL_BG},
-                ],
-            )),
-        ], style={"backgroundColor": _CARD_BG}), width=5),
+        # ── Review queue + live feed ─────────────────────────────────────────
+        dbc.Row([
+            dbc.Col(dbc.Card([
+                html.Div("⚑  Review Queue", className="section-header",
+                         style={"color": "#F39C12"}),
+                dbc.CardBody(dash_table.DataTable(
+                    id="review-table",
+                    columns=_REVIEW_COLS,
+                    data=[],
+                    page_size=8,
+                    **_TABLE_BASE,
+                    style_data_conditional=[
+                        {"if": {"row_index": "odd"}, "backgroundColor": _PANEL_BG},
+                    ],
+                ), style={"padding": "4px"}),
+            ], className="chart-card"), width=5),
 
-        # Live feed
-        dbc.Col(dbc.Card([
-            dbc.CardHeader(html.Strong("Live Decision Feed", style={"color": _ACCENT}),
-                           style={"backgroundColor": _PANEL_BG}),
-            dbc.CardBody(dash_table.DataTable(
-                id="feed-table",
-                columns=_FEED_COLS,
-                data=[],
-                page_size=8,
-                **_TABLE_STYLE,
-                style_data_conditional=[
-                    {"if": {"filter_query": '{action} = "block"'},
-                     "color": "#E74C3C", "fontWeight": "bold"},
-                    {"if": {"filter_query": '{action} = "flag"'},  "color": "#F39C12"},
-                    {"if": {"filter_query": '{action} = "allow"'}, "color": "#2ECC71"},
-                    {"if": {"row_index": "odd"}, "backgroundColor": _PANEL_BG},
-                ],
-            )),
-        ], style={"backgroundColor": _CARD_BG}), width=7),
-    ], className="mb-3 g-2"),
+            dbc.Col(dbc.Card([
+                html.Div("◈  Live Decision Feed", className="section-header",
+                         style={"color": _ACCENT}),
+                dbc.CardBody(dash_table.DataTable(
+                    id="feed-table",
+                    columns=_FEED_COLS,
+                    data=[],
+                    page_size=8,
+                    **_TABLE_BASE,
+                    style_data_conditional=[
+                        {"if": {"filter_query": '{action} = "block"'},
+                         "color": "#E74C3C", "fontWeight": "bold"},
+                        {"if": {"filter_query": '{action} = "flag"'},  "color": "#F39C12"},
+                        {"if": {"filter_query": '{action} = "allow"'}, "color": "#2ECC71"},
+                        {"if": {"row_index": "odd"}, "backgroundColor": _PANEL_BG},
+                    ],
+                ), style={"padding": "4px"}),
+            ], className="chart-card"), width=7),
+        ], className="mb-3 g-2"),
 
-    dcc.Interval(id="interval", interval=DASHBOARD_REFRESH_INTERVAL_MS, n_intervals=0),
-])
+        # ── Footer ──────────────────────────────────────────────────────────
+        dbc.Row(dbc.Col(
+            html.Div(id="footer-ts", className="saint-footer")
+        )),
+
+        dcc.Interval(id="interval", interval=DASHBOARD_REFRESH_INTERVAL_MS, n_intervals=0),
+    ],
+)
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +281,7 @@ app.layout = dbc.Container(fluid=True, style={"backgroundColor": _DARK_BG, "minH
     Output("kpi-block",      "children"),
     Output("kpi-review",     "children"),
     Output("kpi-conf",       "children"),
+    Output("footer-ts",      "children"),
     Input("interval",        "n_intervals"),
 )
 def refresh(_):
@@ -239,20 +290,19 @@ def refresh(_):
 
     empty = go.Figure()
     empty.update_layout(**_LAYOUT_BASE)
+    ts_str = f"Last updated {datetime.now().strftime('%H:%M:%S')}  ·  S.A.I.N.T. v1.0"
 
     if not decisions:
-        return empty, empty, empty, empty, [], [], False, "—","—","—","—","—","—"
+        return empty, empty, empty, empty, [], [], False, "—","—","—","—","—","—", ts_str
 
     # ── Single-pass aggregation ──────────────────────────────────────────────
-    class_counts:  dict[str, int]   = defaultdict(int)
-    action_counts: dict[str, int]   = defaultdict(int)
-    confidences:   list[float]      = []
-    burst = False
+    class_counts:  dict[str, int] = defaultdict(int)
+    action_counts: dict[str, int] = defaultdict(int)
+    confidences:   list[float]    = []
+    burst    = False
     n_review = 0
-    reviewed_ids = set(reviews.keys())
+    reviewed_ids  = set(reviews.keys())
     review_rows: list[dict] = []
-
-    # bucket by 10-second intervals for timeline
     timeline_buckets: dict[int, dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
     for d in decisions:
@@ -264,9 +314,9 @@ def refresh(_):
         if d.get("needs_review"):
             n_review += 1
             if d.get("decision_id") not in reviewed_ids:
-                ts_str = datetime.fromtimestamp(d.get("timestamp", 0)).strftime("%H:%M:%S")
+                t = datetime.fromtimestamp(d.get("timestamp", 0)).strftime("%H:%M:%S")
                 review_rows.append({
-                    "ts":              ts_str,
+                    "ts":              t,
                     "decision_id":     d.get("decision_id", "")[:12] + "…",
                     "predicted_class": cls,
                     "confidence":      f"{d.get('confidence', 0):.3f}",
@@ -274,37 +324,27 @@ def refresh(_):
                 })
         if "burst" in d.get("rationale", "").lower():
             burst = True
-        ts = d.get("timestamp", 0)
-        bucket = int(ts // 10) * 10
+        bucket = int(d.get("timestamp", 0) // 10) * 10
         timeline_buckets[bucket][cls] += 1
 
-    # ── Attack timeline (stacked area) ───────────────────────────────────────
-    all_classes = ["normal", "dos", "probe", "r2l", "u2r"]
+    # ── Attack timeline ───────────────────────────────────────────────────────
     sorted_buckets = sorted(timeline_buckets.keys())
     x_times = [datetime.fromtimestamp(b).strftime("%H:%M:%S") for b in sorted_buckets]
-
-    def _hex_to_rgba(hex_color: str, alpha: float = 0.6) -> str:
-        h = hex_color.lstrip("#")
-        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-        return f"rgba({r},{g},{b},{alpha})"
-
     timeline_fig = go.Figure()
-    for cls in all_classes:
+    for cls in ["normal", "dos", "probe", "r2l", "u2r"]:
         y_vals = [timeline_buckets[b].get(cls, 0) for b in sorted_buckets]
         if any(v > 0 for v in y_vals):
             color = CLASS_COLORS.get(cls, "#888888")
             timeline_fig.add_trace(go.Scatter(
-                x=x_times, y=y_vals,
-                name=cls.upper(),
-                mode="lines",
-                stackgroup="one",
-                line=dict(width=0.5, color=color),
+                x=x_times, y=y_vals, name=cls.upper(),
+                mode="lines", stackgroup="one",
+                line=dict(width=1, color=color),
                 fillcolor=_hex_to_rgba(color),
             ))
     timeline_fig.update_layout(
-        title="Attack Timeline (10-second buckets)",
-        xaxis_title="Time", yaxis_title="Connections",
-        legend=dict(orientation="h", y=1.15),
+        title=dict(text="Attack Timeline · 10-second buckets", font=dict(size=12)),
+        xaxis_title=None, yaxis_title=None,
+        legend=dict(orientation="h", y=1.18, font=dict(size=10)),
         **_LAYOUT_BASE,
     )
 
@@ -312,45 +352,64 @@ def refresh(_):
     bar_fig = go.Figure(go.Bar(
         x=list(class_counts.keys()),
         y=list(class_counts.values()),
-        marker_color=[CLASS_COLORS.get(k, "#888") for k in class_counts],
+        marker=dict(
+            color=[CLASS_COLORS.get(k, "#888") for k in class_counts],
+            line=dict(width=0),
+        ),
         text=list(class_counts.values()),
         textposition="outside",
+        textfont=dict(size=11),
     ))
-    bar_fig.update_layout(title="Threat Class Distribution", **_LAYOUT_BASE)
+    bar_fig.update_layout(
+        title=dict(text="Threat Distribution", font=dict(size=12)),
+        showlegend=False,
+        **_LAYOUT_BASE,
+    )
 
     # ── Action pie ────────────────────────────────────────────────────────────
     pie_fig = go.Figure(go.Pie(
         labels=list(action_counts.keys()),
         values=list(action_counts.values()),
-        marker_colors=[ACTION_COLORS.get(k, "#888") for k in action_counts],
-        hole=0.45,
-        textinfo="percent+label",
+        marker=dict(
+            colors=[ACTION_COLORS.get(k, "#888") for k in action_counts],
+            line=dict(color=_CARD_BG, width=2),
+        ),
+        hole=0.55,
+        textinfo="percent",
+        textfont=dict(size=11),
+        hovertemplate="%{label}: %{value}<extra></extra>",
     ))
-    pie_fig.update_layout(title="Agent Actions", showlegend=False, **_LAYOUT_BASE)
+    pie_fig.update_layout(
+        title=dict(text="Agent Actions", font=dict(size=12)),
+        showlegend=True,
+        legend=dict(font=dict(size=10), orientation="v"),
+        paper_bgcolor=_CARD_BG,
+        font=dict(family="Inter, sans-serif", color="#ccd"),
+        margin=dict(l=10, r=10, t=36, b=10),
+    )
 
     # ── Confidence histogram ──────────────────────────────────────────────────
     hist_fig = go.Figure(go.Histogram(
         x=confidences, nbinsx=20,
-        marker_color=_ACCENT, opacity=0.85,
+        marker=dict(color=_ACCENT, opacity=0.8, line=dict(width=0)),
     ))
-    hist_fig.update_layout(title="Confidence Distribution",
-                           xaxis_title="Confidence", yaxis_title="Count",
-                           **_LAYOUT_BASE)
+    hist_fig.update_layout(
+        title=dict(text="Confidence Distribution", font=dict(size=12)),
+        bargap=0.05,
+        **_LAYOUT_BASE,
+    )
 
-    # ── Feed table (most recent first) ────────────────────────────────────────
-    feed_rows = []
-    for d in decisions[:50]:
-        ts_str = datetime.fromtimestamp(d.get("timestamp", 0)).strftime("%H:%M:%S")
-        feed_rows.append({
-            "ts":              ts_str,
-            "predicted_class": d.get("predicted_class", ""),
-            "confidence":      f"{d.get('confidence', 0):.3f}",
-            "action":          d.get("action", ""),
-            "needs_review":    "YES" if d.get("needs_review") else "—",
-            "rationale":       d.get("rationale", "")[:100] + "…",
-        })
+    # ── Feed table ────────────────────────────────────────────────────────────
+    feed_rows = [{
+        "ts":              datetime.fromtimestamp(d.get("timestamp", 0)).strftime("%H:%M:%S"),
+        "predicted_class": d.get("predicted_class", ""),
+        "confidence":      f"{d.get('confidence', 0):.3f}",
+        "action":          d.get("action", ""),
+        "needs_review":    "YES" if d.get("needs_review") else "—",
+        "rationale":       d.get("rationale", "")[:100] + "…",
+    } for d in decisions[:50]]
 
-    avg_conf = f"{sum(confidences)/len(confidences):.3f}" if confidences else "—"
+    avg_conf = f"{sum(confidences)/len(confidences):.3f}"
 
     return (
         timeline_fig, bar_fig, pie_fig, hist_fig,
@@ -362,6 +421,7 @@ def refresh(_):
         str(action_counts.get("block", 0)),
         str(n_review),
         avg_conf,
+        ts_str,
     )
 
 

@@ -1,0 +1,158 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+/* ── Base ───────────────────────────────────────────────────────────────── */
+body, .dash-debug-menu { font-family: 'Inter', sans-serif !important; }
+
+* { box-sizing: border-box; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0d0d1a; }
+::-webkit-scrollbar-thumb { background: #00F5D433; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #00F5D466; }
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.saint-header {
+    border-bottom: 1px solid #00F5D422;
+    padding-bottom: 12px;
+    margin-bottom: 4px;
+}
+
+.saint-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: #00F5D4;
+    text-shadow: 0 0 30px #00F5D455;
+    margin: 0;
+}
+
+.saint-subtitle {
+    font-size: 0.72rem;
+    letter-spacing: 3px;
+    color: #556;
+    text-transform: uppercase;
+    margin-top: 2px;
+}
+
+/* ── Live badge ──────────────────────────────────────────────────────────── */
+.live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #E74C3C18;
+    border: 1px solid #E74C3C44;
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: #E74C3C;
+    text-transform: uppercase;
+}
+
+.live-dot {
+    width: 7px;
+    height: 7px;
+    background: #E74C3C;
+    border-radius: 50%;
+    animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 #E74C3C66; }
+    50%       { opacity: 0.5; box-shadow: 0 0 0 5px #E74C3C00; }
+}
+
+/* ── KPI cards ───────────────────────────────────────────────────────────── */
+.kpi-card {
+    background: #16213e;
+    border-radius: 8px;
+    padding: 14px 16px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    border-radius: 8px 8px 0 0;
+}
+
+.kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px #0006;
+}
+
+.kpi-icon {
+    font-size: 1.1rem;
+    margin-bottom: 4px;
+    opacity: 0.8;
+}
+
+.kpi-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #778;
+    margin-bottom: 4px;
+}
+
+.kpi-value {
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── Cards ───────────────────────────────────────────────────────────────── */
+.chart-card {
+    background: #16213e;
+    border: 1px solid #ffffff08;
+    border-radius: 8px;
+    height: 100%;
+}
+
+.section-header {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 10px 16px;
+    border-bottom: 1px solid #ffffff0a;
+    background: #1a1a2e;
+    border-radius: 8px 8px 0 0;
+}
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner td,
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner th {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.78rem !important;
+    border-bottom: 1px solid #ffffff08 !important;
+    padding: 7px 10px !important;
+}
+
+/* ── Burst alert ──────────────────────────────────────────────────────────── */
+.burst-alert-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-size: 0.85rem;
+    letter-spacing: 1px;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.saint-footer {
+    text-align: center;
+    font-size: 0.65rem;
+    color: #445;
+    letter-spacing: 1px;
+    padding: 12px 0 6px;
+    border-top: 1px solid #ffffff06;
+    margin-top: 4px;
+}
