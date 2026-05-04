@@ -125,6 +125,7 @@ _FEED_COLS = [
     {"name": "Confidence",   "id": "confidence"},
     {"name": "Action",       "id": "action"},
     {"name": "Review",       "id": "needs_review"},
+    {"name": "Drivers",      "id": "drivers"},
     {"name": "Rationale",    "id": "rationale"},
 ]
 
@@ -133,8 +134,20 @@ _REVIEW_COLS = [
     {"name": "ID",          "id": "decision_id"},
     {"name": "Class",       "id": "predicted_class"},
     {"name": "Confidence",  "id": "confidence"},
+    {"name": "Drivers",     "id": "drivers"},
     {"name": "Rationale",   "id": "rationale"},
 ]
+
+
+def _format_drivers(top_features: list[dict] | None, max_items: int = 3) -> str:
+    """Format top_features as 'src_bytes↑, flag=REJ↑, count↓' for table display."""
+    if not top_features:
+        return "—"
+    parts = []
+    for f in top_features[:max_items]:
+        arrow = "↑" if f.get("contribution", 0) > 0 else "↓"
+        parts.append(f"{f.get('name', '?')}{arrow}")
+    return ", ".join(parts)
 
 _TABLE_BASE = dict(
     style_table={"overflowX": "auto", "border": "none"},
@@ -204,10 +217,11 @@ app.layout = dbc.Container(
             dbc.Col(_kpi_card("kpi-conf",   "Avg Confidence",  "◎", "#3498DB"),  width=2),
         ], className="mb-3 g-2"),
 
-        # ── Attack timeline ──────────────────────────────────────────────────
-        dbc.Row(dbc.Col(
-            _chart_card("Attack Timeline", _ACCENT, "timeline-chart", "200px")
-        ), className="mb-3"),
+        # ── Attack timeline + threat drivers ─────────────────────────────────
+        dbc.Row([
+            dbc.Col(_chart_card("Attack Timeline", _ACCENT,    "timeline-chart", "240px"), width=8),
+            dbc.Col(_chart_card("Threat Drivers",  "#9B59B6",  "drivers-chart",  "240px"), width=4),
+        ], className="mb-3 g-2"),
 
         # ── Charts row ──────────────────────────────────────────────────────
         dbc.Row([
@@ -269,6 +283,7 @@ app.layout = dbc.Container(
 
 @app.callback(
     Output("timeline-chart", "figure"),
+    Output("drivers-chart",  "figure"),
     Output("class-bar",      "figure"),
     Output("action-pie",     "figure"),
     Output("conf-hist",      "figure"),
@@ -293,7 +308,7 @@ def refresh(_):
     ts_str = f"Last updated {datetime.now().strftime('%H:%M:%S')}  ·  S.A.I.N.T. v1.0"
 
     if not decisions:
-        return empty, empty, empty, empty, [], [], False, "—","—","—","—","—","—", ts_str
+        return empty, empty, empty, empty, empty, [], [], False, "—","—","—","—","—","—", ts_str
 
     # ── Single-pass aggregation ──────────────────────────────────────────────
     class_counts:  dict[str, int] = defaultdict(int)
@@ -305,12 +320,24 @@ def refresh(_):
     review_rows: list[dict] = []
     timeline_buckets: dict[int, dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
+    # Mean absolute attribution per feature, restricted to flag/block decisions —
+    # this is what drives the "Threat Drivers" chart.
+    driver_totals: dict[str, float] = defaultdict(float)
+    driver_counts: dict[str, int]   = defaultdict(int)
+
     for d in decisions:
         cls = d.get("predicted_class", "unknown")
         act = d.get("action", "flag")
         class_counts[cls]  += 1
         action_counts[act] += 1
         confidences.append(d.get("confidence", 0.0))
+        top_feats = d.get("top_features") or []
+        if act != "allow":
+            for f in top_feats:
+                name = f.get("name") or f.get("raw_name")
+                if name:
+                    driver_totals[name] += abs(f.get("contribution", 0.0))
+                    driver_counts[name] += 1
         if d.get("needs_review"):
             n_review += 1
             if d.get("decision_id") not in reviewed_ids:
@@ -320,6 +347,7 @@ def refresh(_):
                     "decision_id":     d.get("decision_id", "")[:12] + "…",
                     "predicted_class": cls,
                     "confidence":      f"{d.get('confidence', 0):.3f}",
+                    "drivers":         _format_drivers(top_feats),
                     "rationale":       d.get("rationale", "")[:90] + "…",
                 })
         if "burst" in d.get("rationale", "").lower():
@@ -347,6 +375,33 @@ def refresh(_):
         legend=dict(orientation="h", y=1.18, font=dict(size=10)),
         **_LAYOUT_BASE,
     )
+
+    # ── Threat Drivers (top features across flag/block decisions) ────────────
+    if driver_totals:
+        ranked = sorted(
+            ((name, driver_totals[name] / driver_counts[name]) for name in driver_totals),
+            key=lambda kv: kv[1], reverse=True,
+        )[:8]
+        names  = [n for n, _ in ranked][::-1]      # reverse so largest is on top
+        values = [v for _, v in ranked][::-1]
+        drivers_fig = go.Figure(go.Bar(
+            x=values, y=names, orientation="h",
+            marker=dict(color="#9B59B6", line=dict(width=0)),
+            text=[f"{v:.2f}" for v in values],
+            textposition="outside",
+            textfont=dict(size=10),
+            hovertemplate="%{y}: |attr|=%{x:.3f}<extra></extra>",
+        ))
+        drivers_fig.update_layout(
+            title=dict(text="Top features driving flag/block", font=dict(size=12)),
+            **{**_LAYOUT_BASE, "margin": dict(l=120, r=40, t=36, b=20)},
+        )
+    else:
+        drivers_fig = go.Figure()
+        drivers_fig.update_layout(
+            title=dict(text="Threat Drivers · awaiting attack samples", font=dict(size=12)),
+            **_LAYOUT_BASE,
+        )
 
     # ── Class bar chart ───────────────────────────────────────────────────────
     bar_fig = go.Figure(go.Bar(
@@ -406,13 +461,14 @@ def refresh(_):
         "confidence":      f"{d.get('confidence', 0):.3f}",
         "action":          d.get("action", ""),
         "needs_review":    "YES" if d.get("needs_review") else "—",
+        "drivers":         _format_drivers(d.get("top_features")),
         "rationale":       d.get("rationale", "")[:100] + "…",
     } for d in decisions[:50]]
 
     avg_conf = f"{sum(confidences)/len(confidences):.3f}"
 
     return (
-        timeline_fig, bar_fig, pie_fig, hist_fig,
+        timeline_fig, drivers_fig, bar_fig, pie_fig, hist_fig,
         feed_rows, review_rows,
         burst,
         str(len(decisions)),

@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections import deque
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 
 import numpy as np
 import torch
@@ -25,6 +25,7 @@ from config import (
     FLAG_FOR_REVIEW_THRESHOLD, HIGH_CONFIDENCE_THRESHOLD,
     IDX_TO_CATEGORY, MODEL_NUM_CLASSES,
 )
+from agent.explainer import FeatureExplainer
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -52,6 +53,8 @@ class ThreatDecision:
     rationale: str
     # Optional: flagged for human review
     needs_review: bool
+    # Top driver features (empty for "allow" — explanation is skipped on the fast path)
+    top_features: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -70,8 +73,11 @@ class ThreatReasoningAgent:
     def __init__(
         self,
         model,
+        feature_cols: list[str] | None = None,
+        encoders: dict | None = None,
         device: str | None = None,
         memory_size: int = 500,
+        explain_top_k: int = 5,
     ):
         self.model = model
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -83,6 +89,15 @@ class ThreatReasoningAgent:
 
         # Running counters for anomaly burst detection
         self._burst_window: deque[str] = deque(maxlen=50)
+
+        # Feature attribution — only enabled when feature_cols is supplied.
+        # Skipped silently for unit tests / synthetic inputs.
+        self._explain_top_k = explain_top_k
+        self._explainer: FeatureExplainer | None = (
+            FeatureExplainer(model, feature_cols, encoders, device=self.device)
+            if feature_cols is not None
+            else None
+        )
 
     # ------------------------------------------------------------------
     # Core decision method
@@ -105,6 +120,20 @@ class ThreatReasoningAgent:
             pred_class, confidence, proba
         )
 
+        # Explain non-allow decisions so analysts see *why* the agent acted.
+        # Skipped for "allow" to keep the fast path cheap.
+        top_features: list[dict] = []
+        if action != "allow" and self._explainer is not None:
+            try:
+                top_features = self._explainer.top_features(
+                    features, target_class=pred_idx, k=self._explain_top_k,
+                )
+                summary = FeatureExplainer.format_summary(top_features)
+                if summary:
+                    rationale = f"{rationale} Drivers: {summary}."
+            except Exception as e:                 # noqa: BLE001 — never fail a decision over an explanation
+                print(f"[explainer] skipped: {e}")
+
         decision = ThreatDecision(
             decision_id=str(uuid.uuid4()),
             timestamp=time.time(),
@@ -115,6 +144,7 @@ class ThreatReasoningAgent:
             severity=SEVERITY.get(pred_class, 0),
             rationale=rationale,
             needs_review=needs_review,
+            top_features=top_features,
         )
 
         self._update_memory(decision)

@@ -64,7 +64,11 @@ def get_agent() -> tuple[ThreatReasoningAgent, list[str]]:
             )
         with open(feat_path) as f:
             _feature_cols = json.load(f)
-        _agent = ThreatReasoningAgent(model)
+        _agent = ThreatReasoningAgent(
+            model,
+            feature_cols=_feature_cols,
+            encoders=_encoders,
+        )
         print("Agent ready.")
     return _agent, _feature_cols
 
