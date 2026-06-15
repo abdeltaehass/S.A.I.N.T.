@@ -7,6 +7,8 @@ Endpoints:
   GET  /stats            — agent memory stats
   GET  /decisions        — recent decisions log (last N)
   POST /review/<id>      — human-in-the-loop review submission
+  GET  /report/<id>      — LLM-generated incident report for a decision
+  GET  /report/latest    — LLM report for the most recent flagged/blocked decision
   GET  /health           — liveness probe
 """
 
@@ -23,11 +25,13 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import (
     FLASK_DEBUG, FLASK_HOST, FLASK_PORT,
-    INFERENCE_CACHE_TTL, REDIS_DB, REDIS_HOST, REDIS_PORT,
+    INFERENCE_CACHE_TTL, LLM_REPORT_CACHE_TTL,
+    REDIS_DB, REDIS_HOST, REDIS_PORT,
 )
 from data.loader import load_artifacts, preprocess_single
 from model.classifier import load_model
 from agent.reasoning import ThreatReasoningAgent
+from agent.llm_reporter import ThreatReporter
 
 # ---------------------------------------------------------------------------
 # App bootstrap
@@ -50,6 +54,15 @@ _agent: ThreatReasoningAgent | None = None
 _feature_cols: list[str] | None = None
 _scaler = None
 _encoders = None
+
+# --- LLM incident reporter (lazy-loaded once) ---
+_reporter: ThreatReporter | None = None
+
+def get_reporter() -> ThreatReporter:
+    global _reporter
+    if _reporter is None:
+        _reporter = ThreatReporter()
+    return _reporter
 
 def get_agent() -> tuple[ThreatReasoningAgent, list[str]]:
     global _agent, _feature_cols, _scaler, _encoders
@@ -187,6 +200,86 @@ def submit_review(decision_id: str):
         return jsonify({"error": str(e)}), 500
 
     return jsonify({"status": "review_saved", **review})
+
+
+# ---------------------------------------------------------------------------
+# LLM incident reports
+# ---------------------------------------------------------------------------
+
+def _find_decision(decision_id: str) -> dict | None:
+    """Scan the recent decisions log for a matching id."""
+    r = get_redis()
+    try:
+        raw = r.lrange("saint:decisions", 0, 999)
+    except redis.RedisError:
+        return None
+    for item in raw:
+        d = json.loads(item)
+        if d.get("decision_id") == decision_id:
+            return d
+    return None
+
+
+def _report_for(decision: dict) -> dict:
+    """Generate (or fetch cached) an incident report for a decision dict."""
+    decision_id = decision.get("decision_id", "")
+    r = get_redis()
+    cache_key = f"saint:report:{decision_id}" if decision_id else None
+
+    if cache_key:
+        try:
+            cached = r.get(cache_key)
+            if cached:
+                result = json.loads(cached)
+                result["cached"] = True
+                return result
+        except redis.RedisError:
+            pass
+
+    result = get_reporter().generate(decision)
+    result["decision_id"] = decision_id
+    result["cached"] = False
+
+    if cache_key:
+        try:
+            r.setex(cache_key, LLM_REPORT_CACHE_TTL, json.dumps(result))
+        except redis.RedisError:
+            pass
+    return result
+
+
+@app.route("/report/latest")
+def report_latest():
+    """Incident report for the most recent flagged/blocked decision."""
+    r = get_redis()
+    try:
+        raw = r.lrange("saint:decisions", 0, 999)
+    except redis.RedisError:
+        raw = []
+    for item in raw:
+        d = json.loads(item)
+        if d.get("action") in ("flag", "block"):
+            return jsonify(_report_for(d))
+    return jsonify({"error": "No flagged or blocked decisions found"}), 404
+
+
+@app.route("/report/<decision_id>", methods=["GET", "POST"])
+def report(decision_id: str):
+    """
+    Generate an incident report for a decision.
+
+    GET  — looks the decision up in the recent decisions log by id.
+    POST — accepts a decision dict in the body (no Redis lookup needed).
+    """
+    if request.method == "POST":
+        decision = request.get_json(force=True) or {}
+        decision.setdefault("decision_id", decision_id)
+    else:
+        decision = _find_decision(decision_id)
+        if decision is None:
+            return jsonify({"error": f"Decision {decision_id} not found"}), 404
+
+    return jsonify(_report_for(decision))
 
 
 # ---------------------------------------------------------------------------

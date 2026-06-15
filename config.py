@@ -84,3 +84,13 @@ DASHBOARD_REFRESH_INTERVAL_MS = 2000   # poll every 2s
 # --- Thresholds for agent reasoning ---
 HIGH_CONFIDENCE_THRESHOLD = 0.85
 FLAG_FOR_REVIEW_THRESHOLD = 0.60
+
+# --- LLM threat reporting (Ollama, local & free) ---
+# Generates natural-language SOC incident reports from agent decisions.
+# Falls back to a deterministic template when Ollama is unreachable, so the
+# feature works out-of-the-box and "upgrades" automatically once Ollama runs.
+LLM_ENABLED = os.getenv("LLM_ENABLED", "true").lower() == "true"
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
+LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", 60))      # seconds per generation
+LLM_REPORT_CACHE_TTL = 3600                          # cache reports for 1 hour

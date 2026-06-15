@@ -146,6 +146,57 @@ body, .dash-debug-menu { font-family: 'Inter', sans-serif !important; }
     letter-spacing: 1px;
 }
 
+/* ── AI Incident Report ──────────────────────────────────────────────────── */
+.report-btn {
+    background: #00F5D418;
+    border: 1px solid #00F5D455;
+    color: #00F5D4;
+    border-radius: 6px;
+    padding: 3px 12px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.report-btn:hover {
+    background: #00F5D433;
+    box-shadow: 0 0 16px #00F5D433;
+}
+
+.report-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: #778;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #ffffff0a;
+}
+
+.report-body {
+    font-size: 0.86rem;
+    line-height: 1.55;
+    color: #ccd;
+}
+
+.report-body h3 {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #00F5D4;
+    margin: 14px 0 4px;
+}
+
+.report-body h3:first-child { margin-top: 0; }
+
+.report-body strong { color: #fff; }
+
+.report-body em { color: #667; font-size: 0.78rem; }
+
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 .saint-footer {
     text-align: center;
