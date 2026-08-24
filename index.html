@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>S.A.I.N.T. — Network Intrusion Detection</title>
+<meta name="description" content="Network intrusion detection system: 41-feature traffic classification across 5 attack categories, with an LLM agent that explains each alert in plain English.">
+<style>
+:root{--bg:#fff;--fg:#16181d;--mut:#5b6270;--line:#e5e7eb;--card:#fafbfc;--accent:#1f6feb}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:0 20px}
+header{border-bottom:1px solid var(--line);padding:56px 0 40px}
+h1{margin:0 0 6px;font-size:2.4rem;letter-spacing:-.02em}
+.sub{color:var(--mut);font-size:1.1rem;margin:0 0 22px;max-width:64ch}
+.badges a,.badges span{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:5px 11px;margin:0 6px 6px 0;font-size:.85rem;text-decoration:none;color:var(--fg);background:var(--card)}
+.badges a:hover{border-color:var(--mut)}
+.metrics{display:flex;flex-wrap:wrap;gap:14px;margin:26px 0 0}
+.m{flex:1 1 150px;border:1px solid var(--line);border-radius:8px;padding:14px 16px;background:var(--card)}
+.m b{display:block;font-size:1.5rem;letter-spacing:-.02em}
+.m span{color:var(--mut);font-size:.82rem}
+section{padding:44px 0;border-bottom:1px solid var(--line)}
+h2{font-size:1.35rem;margin:0 0 6px;letter-spacing:-.01em}
+.note{color:var(--mut);font-size:.92rem;margin:0 0 22px;max-width:70ch}
+pre{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px;overflow-x:auto;font-size:.86rem;line-height:1.5}
+.grid{display:grid;grid-template-columns:1fr;gap:16px}
+@media(min-width:800px){.grid{grid-template-columns:1fr 1fr}}
+.box{border:1px solid var(--line);border-radius:8px;padding:16px 18px;background:var(--card)}
+.box h3{margin:0 0 6px;font-size:1rem}
+.box p{margin:0;color:var(--mut);font-size:.9rem}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{color:var(--mut);font-weight:600;font-size:.82rem;text-transform:uppercase;letter-spacing:.04em}
+code{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:.87em}
+footer{padding:34px 0 60px;color:var(--mut);font-size:.87rem}
+footer a{color:var(--fg)}
+.banner{background:#f2f7ff;border:1px solid #cfe0f8;border-left:5px solid var(--accent);border-radius:6px;padding:13px 15px;margin:0 0 26px;font-size:.9rem}
+</style></head><body>
+<header><div class="wrap">
+<h1>S.A.I.N.T.</h1>
+<p class="sub">Network intrusion detection system that classifies traffic flows across five attack categories &mdash; and uses an LLM agent to explain <em>why</em> each alert fired, in plain English.</p>
+<div class="badges">
+<a href="https://github.com/abdeltaehass/S.A.I.N.T.">Source on GitHub</a>
+<span>Python &middot; PyTorch &middot; Flask &middot; Redis &middot; Plotly</span>
+</div>
+<div class="metrics">
+<div class="m"><b>41</b><span>traffic features</span></div>
+<div class="m"><b>5</b><span>attack categories</span></div>
+<div class="m"><b>125K+</b><span>samples analyzed</span></div>
+<div class="m"><b>89%</b><span>detection accuracy</span></div>
+</div>
+</div></header>
+
+<section><div class="wrap">
+<div class="banner"><b>Research and educational project.</b> Built on the NSL-KDD benchmark dataset &mdash; not hardened for production network defense.</div>
+<h2>Detection model</h2>
+<p class="note">Each connection is represented by the 41-feature NSL-KDD traffic-flow schema &mdash; basic connection properties, content features, and two windows of time-based statistics.</p>
+<pre>Basic          duration, protocol_type, service, flag, src_bytes, dst_bytes, ...
+Content        hot, num_failed_logins, logged_in, root_shell, su_attempted, ...
+Time-based     count, srv_count, serror_rate, same_srv_rate, ...      (last 2 s, same host)
+Host-based     dst_host_count, dst_host_srv_count, dst_host_serror_rate, ...  (last 100 connections)</pre>
+<h2 style="margin-top:30px">Attack categories</h2>
+<table>
+<tr><th>Class</th><th>Meaning</th></tr>
+<tr><td><code>normal</code></td><td>Benign traffic</td></tr>
+<tr><td><code>dos</code></td><td>Denial of service</td></tr>
+<tr><td><code>probe</code></td><td>Surveillance and scanning</td></tr>
+<tr><td><code>r2l</code></td><td>Remote-to-local intrusion</td></tr>
+<tr><td><code>u2r</code></td><td>User-to-root privilege escalation</td></tr>
+</table>
+</div></section>
+
+<section><div class="wrap">
+<h2>Architecture</h2>
+<p class="note">The classifier is one component of a pipeline &mdash; the reasoning agent and dashboard are what turn a score into something an analyst can act on.</p>
+<div class="grid">
+<div class="box"><h3>model/classifier.py</h3><p>Traffic-flow classifier over the 41-feature schema, producing a category and confidence per connection.</p></div>
+<div class="box"><h3>agent/reasoning.py</h3><p>Reasoning layer that correlates signals across connections rather than judging each in isolation.</p></div>
+<div class="box"><h3>agent/explainer.py</h3><p>Attributes each alert to the specific features that drove it, so a decision can be audited.</p></div>
+<div class="box"><h3>agent/llm_reporter.py</h3><p>Turns a structured detection into a readable incident narrative for an analyst.</p></div>
+<div class="box"><h3>api/routes.py</h3><p>Flask service exposing detection endpoints, backed by Redis for state and streaming.</p></div>
+<div class="box"><h3>dashboard/app.py</h3><p>Live Plotly dashboard of traffic, alerts, and category breakdowns.</p></div>
+</div>
+</div></section>
+
+<section><div class="wrap">
+<h2>Run it</h2>
+<p class="note">Containerized with Redis; <code>scripts/replay.py</code> streams the dataset back through the stack to simulate live traffic.</p>
+<pre>git clone https://github.com/abdeltaehass/S.A.I.N.T.
+cd S.A.I.N.T.
+docker compose up            # API + Redis + dashboard
+
+python scripts/train.py      # train the classifier
+python scripts/replay.py     # replay traffic through the live pipeline</pre>
+</div></section>
+
+<footer><div class="wrap">
+Built by <a href="https://abdelrahmantaeha.com">Abdelrahman Taeha</a> &middot;
+<a href="https://github.com/abdeltaehass/S.A.I.N.T.">github.com/abdeltaehass/S.A.I.N.T.</a>
+</div></footer>
+</body></html>
